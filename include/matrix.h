@@ -12,8 +12,12 @@ using std::cerr;
 using std::endl;
 using std::cout;
 
-struct MatrixSizeException{};
-struct OutOfIndexException{};
+/*
+	XXX 
+	1. Can we make iterator of horizontal and vertical separately?
+		- It seems we don't need that feature
+*/
+
 template <class element_type>
 class Matrix{
 	public:
@@ -38,6 +42,9 @@ class Matrix{
 		template <typename T>
 		void operator=(const std::vector<T> & v);
 
+		template <typename T>
+		void operator=(const std::initializer_list<T> l);
+
 		// Return norm of the matrix
 		double norm(void);
 
@@ -50,7 +57,6 @@ class Matrix{
 
 		// Return reshaped matrix
 		Matrix reshape(size_t new_height, size_t new_stride);
-
 
 		// Calculate dot product
 		Matrix dot(Matrix &m);
@@ -69,6 +75,9 @@ class Matrix{
 		std::valarray<element_type> m_storage;
 		size_t m_stride;
 		size_t m_height;
+		struct MatrixSizeException{};
+		struct OutOfIndexException{};
+
 };
 
 /* =======================================================================
@@ -116,19 +125,29 @@ void Matrix<element_type>::operator=(const std::vector<T> & v){
 	if(v.size() != m_storage.size())
 		throw MatrixSizeException();
 
-	for(int i=0;i<m_height;i++){
-		for(int j=0;j<m_stride;j++){
+	for(auto i=0;i<m_height;i++){
+		for(auto j=0;j<m_stride;j++){
 			(*this)(i,j) = v[i * m_stride + j];
 		}
 	}
+}
+
+template <class element_type>
+template <typename T>
+void Matrix<element_type>::operator=(const std::initializer_list<T> l){
+	if(l.size() != m_storage.size())
+		throw MatrixSizeException();
+
+	std::copy(l.begin(), l.end(), begin(m_storage));
+
 }
 
 template<class element_type>
 bool Matrix<element_type>::operator==(Matrix & m){
 	if(m.m_height == m_height && m.m_stride == m_stride){
 		int count_error = 0;
-		for(int i=0;i<m_height;i++)
-			for(int j=0;j<m_stride;j++)
+		for(auto i=0;i<m_height;i++)
+			for(auto j=0;j<m_stride;j++)
 				if(m(i, j) != (*this)(i,j))
 					return false;
 		return true;
@@ -140,18 +159,18 @@ bool Matrix<element_type>::operator==(Matrix & m){
 
 template<class element_type>
 Matrix<element_type> Matrix<element_type>::operator+(Matrix & m){
-	Matrix temp(m_height,m_stride);
+	Matrix ret(m_height,m_stride);
 	if(this->size() == m.size())
-		temp.m_storage = m.m_storage + m_storage;
+		ret.m_storage = m.m_storage + m_storage;
 	else if(m_height == m.dims()[0] && m.dims()[1] == 1){
 		for(int i=0;i<m_height;i++)
 			for(int j=0;j<m_stride;j++)
-				temp(i,j) = (*this)(i,j) + m[i];
+				ret(i,j) = (*this)(i,j) + m[i];
 	}
 	else{
 		throw MatrixSizeException();
 	}
-	return temp;
+	return ret;
 }
 
 template <class element_type>
@@ -182,13 +201,13 @@ Matrix<element_type> Matrix<element_type>::reshape(size_t new_height, size_t new
 
 template<class element_type>
 Matrix<element_type> Matrix<element_type>::dot(Matrix &m){
-	Matrix temp(m_height,m.m_stride);
+	Matrix ret(m_height,m.m_stride);
 	// Check dimension
 	if(m_stride == m.m_height){
 		for(int hi=0;hi<m_height;hi++){
 			for(int wi=0;wi<m.m_stride;wi++){
 				for(int j=0;j<m_stride;j++){
-					temp(hi,wi) += (*this)(hi, j) * m(j,wi);
+					ret(hi,wi) += (*this)(hi, j) * m(j,wi);
 				}
 			}
 		}
@@ -196,7 +215,7 @@ Matrix<element_type> Matrix<element_type>::dot(Matrix &m){
 	else{
 		throw MatrixSizeException();
 	}
-	return temp;
+	return ret;
 }
 
 // Print all element with its dimension
@@ -225,31 +244,31 @@ void Matrix<element_type>::print(void){
 template <class element_type>
 Matrix<element_type> Matrix<element_type>::sum(char direction){
 	size_t length;
-	Matrix result;
+	Matrix ret;
 	if(direction == 1){ // Sum each row
 		length = m_height;
-		result = Matrix(length, 1);
+		ret = Matrix(length, 1);
 		for(size_t i=0;i<m_height;i++){
 			std::valarray<element_type> one_row(
 					m_storage[std::slice(m_stride * i, m_stride, 1)]
 					);
-			result[i] = one_row.sum();
+			ret[i] = one_row.sum();
 		}
 	} 
 	else if(direction == 2){
 		length = m_stride;
-		result = Matrix(1, length);
+		ret = Matrix(1, length);
 		for(size_t i=0;i<m_stride;i++){
 			std::valarray<element_type> one_column(
 					m_storage[std::slice(i, m_height, m_stride)]
 					);
-			result[i] = one_column.sum();
+			ret[i] = one_column.sum();
 		}
 	}
 	else{
 		std::cerr << "Please enter correct direction" << std::endl;
 	}
-	return result;
+	return ret;
 }
 
 template <class element_type>

@@ -4,20 +4,37 @@ int main(void){
 	Matrix<double> matrix(5,2);
 	Matrix<double> matrix2(5,2);
 	cout << (matrix == matrix2) << endl;
+	cout.setf(std::ios::left);
+
+
+	// Scalar product test
+	cout.fill('=');
+	cout << std::setw(50) << "=" << endl;
+	cout << "Matrix scalar production test" << endl;
+
 	matrix(1,1) = 5;
 	matrix2(4,1) = 6;
-	Matrix<double> v(5,1);	
-	v[0] = 1;
-	v[1] = 2;
-	v[2] = 3;
-	v[3] = 4;
-	v[4] = 4;
+
 	Matrix<double> m = matrix + matrix2;
 	m.print();
 	double t = 2;
 	m = m*t;
 	m.print();
+	
+	// Addition example
+	
+	cout.setf(std::ios::left);
+	cout.fill('=');
+	cout << std::setw(50) << "=" << endl;
+	cout << "Matrix addition test" << endl;
+	
+	Matrix<double> v(5,1);	
+	v = {1,2,3,4,5};
+	m.print();
+	cout << "Plus" << endl;
+	v.print();
 	m = m + v;
+	cout << "Result" << endl;
 	m.print();
 
 	// Dot example
