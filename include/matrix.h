@@ -8,19 +8,24 @@
 #include <vector>
 #include <iomanip>
 #include <cmath>
+#include <cstdlib>
+#include <ctime>
 using std::cerr;
 using std::endl;
 using std::cout;
-
+using std::vector;
 /*
 	XXX 
 	1. Can we make iterator of horizontal and vertical separately?
 		- It seems we don't need that feature
 */
 
+
+
 template <class element_type>
 class Matrix{
 	public:
+		~Matrix(void){};
 		Matrix(void):
 			m_height(1), m_stride(1), m_storage(1)
 			{};
@@ -29,14 +34,54 @@ class Matrix{
 			m_height(height), m_stride(width), m_storage(width * height)
 			{};
 
+		template <typename T>
+		Matrix(std::vector<T> dims){
+			if(dims.size() != 2){
+				throw MatrixSizeException();
+			}
+			m_height = dims[0];
+			m_stride = dims[1];
+			m_storage = std::valarray<element_type>(m_stride * m_height);
+		}
+
+		template <typename T>
+		Matrix(Matrix<T> ref){
+			*this = ref;
+		}
+
 		element_type & operator()(size_t row, size_t column);
 		element_type & operator[](size_t num);
 		bool operator==(Matrix & m); // Return true if all element is same
-		Matrix operator*(Matrix & m); // Calculate elementwise product
+
 		Matrix operator+(Matrix & m);	
+		template <typename T>
+		Matrix operator+(T val);
+		
+		Matrix & operator+=(Matrix & ref);
+		template <typename T>
+		Matrix & operator+=(T val);
+
+		Matrix operator-(Matrix & m);	
+		template <typename T>
+		Matrix operator-(T val);
+		
+		Matrix & operator-=(Matrix & ref);
+		template <typename T>
+		Matrix & operator-=(T val);
 
 		template <typename T>
 		Matrix operator*(T val);
+			
+		Matrix operator*(Matrix & m); // Calculate elementwise product
+		template <typename T>
+		Matrix & operator*=(T val);
+
+		template <typename T>
+		Matrix operator/(T val);
+			
+		Matrix operator/(Matrix & m); // Calculate elementwise product
+		template <typename T>
+		Matrix & operator/=(T val);
 
 		// Init matrix by vector
 		template <typename T>
@@ -60,7 +105,6 @@ class Matrix{
 
 		// Calculate dot product
 		Matrix dot(Matrix &m);
-
 		// Print all element with its dimension
 		void print(void);
 		
@@ -70,6 +114,8 @@ class Matrix{
 		// Sum direction (1 : sum each row, 2 : sum each cloumn)
 		Matrix sum(char direction);
 		
+		Matrix transpose(void);
+
 
 	private:
 		std::valarray<element_type> m_storage;
@@ -79,6 +125,9 @@ class Matrix{
 		struct OutOfIndexException{};
 
 };
+
+// template<typename T>
+Matrix<double> ones(size_t height, size_t stride);
 
 /* =======================================================================
 
@@ -104,42 +153,36 @@ element_type & Matrix<element_type>::operator[](size_t num){
 	return m_storage[num]; // column major
 }
 
-template <class element_type>
-Matrix<element_type> Matrix<element_type>::operator*(Matrix & m){
-	if(m.m_stride != m_stride || m.m_height != m_height){
-		throw MatrixSizeException();
-	}
 
-	Matrix ret(m_height, m_stride);
-	for(auto i=0;i<m_height;i++){
-		for(auto j=0;j<m_stride;j++){
-			ret(i,j) = (*this)(i,j) * m(i,j);
-		}
-	}
-	return ret;
-}
 
 template <class element_type>
 template <typename T>
 void Matrix<element_type>::operator=(const std::vector<T> & v){
-	if(v.size() != m_storage.size())
-		throw MatrixSizeException();
-
-	for(auto i=0;i<m_height;i++){
-		for(auto j=0;j<m_stride;j++){
-			(*this)(i,j) = v[i * m_stride + j];
-		}
+	if(m_storage.size() == 1){ // Defualt
+		Matrix<element_type> ret(v.size(), 1);
+		ret = v;
+		*this = ret;
 	}
+	else{
+		if(v.size() != m_storage.size())
+			throw MatrixSizeException();
+		std::copy(v.begin(), v.end(), begin(m_storage));
+	}	
 }
 
 template <class element_type>
 template <typename T>
 void Matrix<element_type>::operator=(const std::initializer_list<T> l){
-	if(l.size() != m_storage.size())
-		throw MatrixSizeException();
-
-	std::copy(l.begin(), l.end(), begin(m_storage));
-
+	if(m_storage.size() == 1){ // Defualt
+		Matrix<element_type> ret(l.size(), 1);
+		ret = l;
+		*this = ret;
+	}
+	else{
+		if(l.size() != m_storage.size())
+			throw MatrixSizeException();
+		std::copy(l.begin(), l.end(), begin(m_storage));
+	}
 }
 
 template<class element_type>
@@ -157,15 +200,27 @@ bool Matrix<element_type>::operator==(Matrix & m){
 	}
 }
 
+// ========================================================================
+// Addition method
+// ========================================================================
 template<class element_type>
 Matrix<element_type> Matrix<element_type>::operator+(Matrix & m){
 	Matrix ret(m_height,m_stride);
-	if(this->size() == m.size())
+	if(m.size() == 1)
+		ret.m_storage = m_storage + m[0];
+	else if(this->size() == m.size()){
 		ret.m_storage = m.m_storage + m_storage;
-	else if(m_height == m.dims()[0] && m.dims()[1] == 1){
+	}
+	// Broadcast case
+	else if(m.dims()[0] == m_height && m.dims()[1] == 1){
 		for(int i=0;i<m_height;i++)
 			for(int j=0;j<m_stride;j++)
-				ret(i,j) = (*this)(i,j) + m[i];
+				ret(i,j) = (*this)(i,j) + m(i,0);
+	}
+	else if(m.dims()[0] == 1 && m.dims()[1] == m_stride){
+		for(int j=0;j<m_stride;j++)
+			for(int i=0;i<m_height;i++)
+				ret(i,j) = (*this)(i,j) + m(0,j);
 	}
 	else{
 		throw MatrixSizeException();
@@ -173,12 +228,230 @@ Matrix<element_type> Matrix<element_type>::operator+(Matrix & m){
 	return ret;
 }
 
+template<class element_type>
+template<typename T>
+Matrix<element_type> Matrix<element_type>::operator+(T val){
+	Matrix ret(*this);
+	for(int i=0;i<ret.m_height;i++){
+		for(int j=0;j<ret.m_stride;j++){
+			ret(i,j) = ret(i,j) + val;
+		}
+	}
+	return ret;
+}
+
+template<class element_type, typename T>
+Matrix<element_type> operator+(T val, Matrix<element_type> ref){
+	Matrix<element_type> ret(ref);
+	for(int i=0;i<ref.dims()[0];i++){
+		for(int j=0;j<ref.dims()[1];j++){
+			ret(i,j) = ref(i,j) + val;
+		}
+	}
+	// ret.m_storage += val;
+	return ret;
+}
+
+template<class element_type>
+Matrix<element_type> & Matrix<element_type>::operator+=(Matrix & ref){
+	*this = *this + ref;
+	return *this;
+};
+
+template<class element_type>
+template<typename T>
+Matrix<element_type> & Matrix<element_type>::operator+=(T val){
+	this->m_storage += val;
+	return *this;
+};
+
+// ========================================================================
+// Subtract method
+// ========================================================================
+template<class element_type>
+Matrix<element_type> Matrix<element_type>::operator-(Matrix & m){
+	Matrix ret(m_height,m_stride);
+	if(m.size() == 1){
+		ret.m_storage = m_storage - m[0];
+	}
+	else if(this->size() == m.size()){
+		ret.m_storage = m_storage - m.m_storage;
+	}
+	else if(m.dims()[0] == m_height && m.dims()[1] == 1){
+		for(int i=0;i<m_height;i++)
+			for(int j=0;j<m_stride;j++)
+				ret(i,j) = (*this)(i,j) - m(i,0);
+	}
+	else if(m.dims()[0] == 1 && m.dims()[1] == m_stride){
+		for(int j=0;j<m_stride;j++)
+			for(int i=0;i<m_height;i++)
+				ret(i,j) = (*this)(i,j) - m(0,j);
+	}
+	else{
+		throw MatrixSizeException();
+	}
+	return ret;
+}
+
+template<class element_type>
+template<typename T>
+Matrix<element_type> Matrix<element_type>::operator-(T val){
+	Matrix ret(*this);
+	for(int i=0;i<ret.m_height;i++){
+		for(int j=0;j<ret.m_stride;j++){
+			ret(i,j) = ret(i,j) - val;
+		}
+	}
+	return ret;
+}
+
+template<class element_type, typename T>
+Matrix<element_type> operator-(T val, Matrix<element_type> ref){
+	Matrix<element_type> ret(ref);
+	for(int i=0;i<ref.dims()[0];i++){
+		for(int j=0;j<ref.dims()[1];j++){
+			ret(i,j) = val - ref(i,j);
+		}
+	}
+	return ret;
+}
+
+template<class element_type>
+Matrix<element_type> & Matrix<element_type>::operator-=(Matrix & ref){
+	*this = *this - ref;
+	return *this;
+};
+
+template<class element_type>
+template<typename T>
+Matrix<element_type> & Matrix<element_type>::operator-=(T val){
+	this->m_storage -= val;
+	return *this;
+};
+
+// ========================================================================
+// Multiplication method
+// ========================================================================
+template <class element_type>
+Matrix<element_type> Matrix<element_type>::operator*(Matrix & m){
+	Matrix ret(m_height, m_stride);
+	if(m.dims()[0] == 1 && m.dims()[1] == m_stride){
+		for(int i=0;i<m_height;i++){
+			for(int j=0;j<m_stride;j++){
+				ret(i,j) = (*this)(i,j) * m(0, j);
+			}
+		}
+	}
+	else if(m.dims()[0] == m_height && m.dims()[1] == 1){
+		for(int j=0;j<m_stride;j++){
+			for(int i=0;i<m_height;i++){
+				ret(i,j) = (*this)(i,j) * m(i, 0);
+			}
+		}
+	}
+	else if(m.size() == this->size()){
+		for(auto i=0;i<m_height;i++){
+			for(auto j=0;j<m_stride;j++){
+				ret(i,j) = (*this)(i,j) * m(i,j);
+			}
+		}
+	}
+	else{
+		throw MatrixSizeException();
+	}
+	return ret;
+}
+
+
 template <class element_type>
 template <typename T>
 Matrix<element_type> Matrix<element_type>::operator*(T val){
+	Matrix ret(m_height, m_stride);
+	ret.m_storage = m_storage;
+	ret.m_storage *= (double)val;
+	return ret;
+}
+
+template <class element_type, typename T>
+Matrix<element_type> operator*(T val, Matrix<element_type> & ref){
+	Matrix<element_type> ret(ref);
+	for(int i=0;i<ref.dims()[0];i++){
+		for(int j=0;j<ref.dims()[1];j++){
+			ret(i,j) = ret(i,j) * val;
+		}
+	}
+	return ret;
+}
+
+template<class element_type>
+template<typename T>
+Matrix<element_type> & Matrix<element_type>::operator*=(T val){
 	this->m_storage *= val;
 	return *this;
+};
+
+// ========================================================================
+// Division method
+// ========================================================================
+template <class element_type>
+Matrix<element_type> Matrix<element_type>::operator/(Matrix & m){
+	Matrix ret(m_height, m_stride);
+	if(m.dims()[0] == 1 && m.dims()[1] == m_stride){
+		for(int i=0;i<m_height;i++){
+			for(int j=0;j<m_stride;j++){
+				ret(i,j) = (*this)(i,j) / m(0, j);
+			}
+		}
+	}
+	else if(m.dims()[0] == m_height && m.dims()[1] == 1){
+		for(int j=0;j<m_stride;j++){
+			for(int i=0;i<m_height;i++){
+				ret(i,j) = (*this)(i,j) / m(i, 0);
+			}
+		}
+	}
+	else if(m.size() == this->size()){
+		for(auto i=0;i<m_height;i++){
+			for(auto j=0;j<m_stride;j++){
+				ret(i,j) = (*this)(i,j) / m(i,j);
+			}
+		}
+	}
+	else{
+		throw MatrixSizeException();
+	}
+	return ret;
 }
+
+
+template <class element_type>
+template <typename T>
+Matrix<element_type> Matrix<element_type>::operator/(T val){
+	Matrix ret(m_height, m_stride);
+	ret.m_storage = m_storage;
+	ret.m_storage /= (double)val;
+	return ret;
+}
+
+template <class element_type, typename T>
+Matrix<element_type> operator/(T val, Matrix<element_type> & ref){
+	Matrix<element_type> ret(ref);
+	for(int i=0;i<ref.dims()[0];i++){
+		for(int j=0;j<ref.dims()[1];j++){
+			ret(i,j) = ret(i,j) / (double)val;
+		}
+	}
+	return ret;
+}
+
+template<class element_type>
+template<typename T>
+Matrix<element_type> & Matrix<element_type>::operator/=(T val){
+	this->m_storage /= (double)val;
+	return *this;
+};
+
+
 
 /* =======================================================================
 
@@ -221,23 +494,10 @@ Matrix<element_type> Matrix<element_type>::dot(Matrix &m){
 // Print all element with its dimension
 template<class element_type>
 void Matrix<element_type>::print(void){
-	//cout << m_height << " x " << m_stride << endl;
-	if(m_stride == 1){
-		for(int i=0;i<m_storage.size();i++){
-			cout << m_storage[i] << " " ;
-			if(((i+1) % m_stride) == 0) cout << endl;
-		}	
-	} 
-	else if(m_height == 1){
-		for(int i=0;i<m_storage.size();i++)
-			cout << m_storage[i] << " " ;
-		cout << endl;
-	}
-	else{
-		for(int i=0;i<m_storage.size();i++){
-			cout << m_storage[i] << " " ;
-			if(((i+1) % m_stride) == 0) cout << endl;
-		}	
+	cout << "( " << m_height << " x " << m_stride << " )" << endl;
+	for(int i=0;i<m_storage.size();i++){
+		cout << m_storage[i] << " " ;
+		if(((i+1) % m_stride) == 0) cout << endl;
 	}
 }
 
@@ -262,7 +522,7 @@ Matrix<element_type> Matrix<element_type>::sum(char direction){
 			std::valarray<element_type> one_column(
 					m_storage[std::slice(i, m_height, m_stride)]
 					);
-			ret[i] = one_column.sum();
+			ret(0, i) = one_column.sum();
 		}
 	}
 	else{
@@ -284,6 +544,17 @@ double Matrix<element_type>::norm(void){
 }
 
 template <class element_type>
+Matrix<element_type> Matrix<element_type>::transpose(void){
+	Matrix ret(m_stride, m_height);
+	for(int i=0;i<m_height;i++){
+		for(int j=0;j<m_stride;j++){
+			ret(j, i) = (*this)(i,j);
+		}
+	}
+	return ret;
+}
+
+template <class element_type>
 element_type Matrix<element_type>::max(void){
 	return m_storage.max();
 }
@@ -298,5 +569,47 @@ size_t Matrix<element_type>::size(){
 	return m_storage.size();
 }
 
+// Global functions
+// template<typename T>
+Matrix<double> ones(size_t height, size_t stride){
+	Matrix<double> ret(height, stride);
+	ret = vector<double>(height * stride, 1);
+	return ret;
+}
+
+Matrix<double> range(size_t start, size_t end, double step_size){
+	Matrix<double> ret((int)(((double)(end-start))/step_size), 1);
+	for(int i=0;i<(int)(((double)(end-start))/step_size);i++){
+		ret(i, 0) = start + step_size * i;
+	}
+	return ret;
+}
+
+Matrix<double> range(size_t start, size_t end){
+	Matrix<double> ret(end-start, 1);
+	for(int i=0;i<end-start;i++){
+		ret(i, 0) = start + i;
+	}
+	return ret;
+}
+
+Matrix<double> range(size_t end){
+	Matrix<double> ret(end, 1);
+	for(int i=0;i<end;i++){
+		ret(i, 0) = i;
+	}
+	return ret;
+}
+
+Matrix<double> random(size_t height, size_t width, int seed = 1){
+	Matrix<double> ret(height, width);
+	srand((unsigned int)time(NULL) * seed);
+	for(int i=0;i<height;i++){
+		for(int j=0;j<width;j++){
+			ret(i, j) = (double)(rand() % 100000) / (double)100000;
+		}
+	}
+	return ret;
+}
 
 #endif 
